@@ -4,3 +4,6 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 results/
+!results/
+!results/dqn/
+!results/dqn/dqn_demo.gif
