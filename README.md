@@ -12,6 +12,10 @@ Deep Q-Network (DQN) implementation for `LunarLander-v3` using Gymnasium and PyT
 
 Training and evaluation artifacts are written to `results/`.
 
+## Demo
+
+![DQN LunarLander demo](results/dqn/dqn_demo.gif)
+
 ## Environment details
 
 This project targets the discrete Lunar Lander task:
