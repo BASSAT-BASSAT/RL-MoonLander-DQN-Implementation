@@ -1,132 +1,149 @@
-# Final Project — Environment & Setup (Person 1)
+# RL MoonLander DQN
 
-Shared setup used by DQN, REINFORCE, A2C, and the evaluation code.
+Deep Q-Network (DQN) implementation for `LunarLander-v3` using Gymnasium and PyTorch.
 
-## Environment: `LunarLander-v3` (discrete, 4 actions)
+## What this repo contains
 
-| Property          | Value                                           |
-|-------------------|-------------------------------------------------|
-| State             | 8-dim vector (pos, vel, angle, ω, 2 legs)       |
-| Action (primary)  | `Discrete(4)` — noop, left, main, right engine  |
-| Action (optional) | `Box(-1, 1, (2,))` — continuous thrust (A2C)    |
-| Max steps/ep      | 1000                                            |
-| Solved            | avg return ≥ 200 over 100 eps                   |
+- Canonical package code under `src/moonlander_rl/`
+- DQN training and evaluation entry points under `src/moonlander_rl/dqn/`
+- Shared environment utilities under `src/moonlander_rl/env/`
+- Tests under `tests/`
+- Optional notebook workflow under `notebooks/`
 
-Why discrete: small networks, DQN works as-is, a single seed finishes in tens of minutes so we can run multiple seeds.
+Training and evaluation artifacts are written to `results/`.
 
-## Layout
+## Environment details
 
-```
-final-project/
+This project targets the discrete Lunar Lander task:
+
+- **Env ID**: `LunarLander-v3`
+- **Observation space**: 8D state vector
+- **Action space**: `Discrete(4)` (noop, left, main, right engine)
+- **Typical solved threshold**: average return >= 200 over 100 episodes
+
+## Project layout
+
+```text
+RL_DQN_Moonlander/
 ├── README.md
+├── Makefile
+├── requirements.txt
+├── notebooks/
 ├── src/
-│   ├── __init__.py
-│   └── env_utils.py      # env factory, seeding, logging
+│   └── moonlander_rl/
+│       ├── dqn/
+│       │   ├── main.py          # training CLI
+│       │   ├── eval.py          # evaluation + watch/GIF CLI
+│       │   ├── agent.py
+│       │   ├── train.py
+│       │   └── ...
+│       └── env/
+│           └── utils.py         # make_env, seeding, logging
 └── tests/
-    └── test_env.py       # run this before training
+    ├── dqn/
+    └── test_env.py
 ```
 
-Other folders (`src/agents/`, `configs/`, `results/`, …) will be added by Persons 2–5.
+## Installation
 
-## Environment
+Use Python 3.10+.
 
-Activate the CUDA conda env before running anything:
+```bash
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
+
+If you use conda:
 
 ```bash
 conda activate torch310
 ```
 
-Deps already installed there: `torch`, `gymnasium[box2d]`, `numpy`, `tensorboard`, `matplotlib`.
-
 ## Quick start
 
-```python
-from src.env_utils import make_env, set_seed, get_device, RunLogger, DEFAULT_SEEDS
+### Train
 
-set_seed(42)
-device = get_device()
-
-env, info = make_env("LunarLander-v3", seed=42, continuous=False)
-# Size networks from info.obs_dim and info.n_actions. Don't hardcode 8 or 4.
-
-with RunLogger("dqn", seed=42) as logger:
-    global_step = 0
-    for ep in range(1000):
-        obs, _ = env.reset(seed=42 + ep)
-        done, ret, length = False, 0.0, 0
-        while not done:
-            action = ...  # your policy
-            obs, reward, terminated, truncated, step_info = env.step(action)
-            done = terminated or truncated
-            ret += reward
-            length += 1
-            global_step += 1
-        logger.log_episode(episode=ep, reward=ret, length=length, loss=None)
-        # Optional TB-only scalars:
-        # logger.log_scalar("train/epsilon", epsilon, step=global_step)
+```bash
+python -m moonlander_rl.dqn.main
 ```
 
-## API (`src/env_utils.py`)
+or via console script:
 
-| Symbol                  | What it does                                                      |
-|-------------------------|-------------------------------------------------------------------|
-| `DEFAULT_ENV_NAME`      | `"LunarLander-v3"`                                                |
-| `DEFAULT_SEEDS`         | `[0, 1, 2, 42, 123]` — run all of these                           |
-| `DEFAULT_MAX_EPISODES`  | `1000` (agree with team)                                          |
-| `set_seed(seed)`        | seeds python / numpy / torch                                      |
-| `get_device()`          | cuda if available, else cpu                                       |
-| `make_env(...)`         | returns `(env, EnvInfo)`                                          |
-| `EnvInfo`               | `obs_dim`, `is_discrete`, `n_actions`, `action_dim`, `action_low/high`, `max_episode_steps`, `seed` |
-| `RunLogger(algo, seed)` | writes CSV + TensorBoard                                          |
-| `csv_path(algo, seed)`  | `results/logs/{algo}_seed{seed}.csv`                              |
-| `tb_dir(algo, seed)`    | `results/tensorboard/{algo}/seed{seed}/`                          |
+```bash
+dqn-train
+```
 
-### Step / reset
+### Evaluate
 
-- `env.step(a)` → `(obs, reward, terminated, truncated, info)`.
-- Use `done = terminated or truncated` to end the loop.
-- Only `terminated` should zero bootstrap targets (truncation is a time limit, not a real terminal).
-- `env.reset(seed=...)` → `(obs, info)`. Pass `seed=base + ep` each episode for reproducibility.
+```bash
+python -m moonlander_rl.dqn.eval --episodes 100
+```
 
-### Episode stats
+or:
 
-`RecordEpisodeStatistics` adds `step_info["episode"]["r"]` and `["l"]` on the final step. The sanity test checks these match your own sums.
+```bash
+dqn-eval --episodes 100
+```
 
-## Logging (CSV + TensorBoard)
+### Watch one greedy episode live
 
-`RunLogger` writes to both:
+```bash
+python -m moonlander_rl.dqn.eval --watch
+```
 
-- **CSV** — `results/logs/{algo}_seed{seed}.csv` with columns:
-  ```
-  episode, reward, length, loss
-  ```
-- **TensorBoard** — `results/tensorboard/{algo}/seed{seed}/`.
+### Save one greedy episode as GIF
 
-`loss` can be blank if the algo doesn't track a per-episode loss. Each agent picks what it logs (DQN: mean TD loss; REINFORCE: PG loss; A2C: actor+critic loss) and notes it in its own README.
+```bash
+python -m moonlander_rl.dqn.eval --gif results/dqn/eval_episode.gif
+```
 
-Extra scalars (epsilon, grad norm, entropy, …) go through `logger.log_scalar(tag, value, step)` — TB only.
+## Make targets
 
-### View TensorBoard
+`Makefile` provides a convenient workflow:
+
+- `make install` / `make install-dev`: install dependencies + editable package
+- `make train`: run DQN training
+- `make eval`: greedy evaluation
+- `make eval-watch`: evaluation + one live episode
+- `make eval-gif`: evaluation + one GIF episode
+- `make test`: run all tests
+- `make lint`: run Ruff checks
+- `make format`: format code with Ruff
+- `make check` / `make ci`: lint + tests
+
+## Logging and outputs
+
+The shared `RunLogger` writes:
+
+- CSV logs to `results/logs/`
+- TensorBoard logs to `results/tensorboard/`
+
+DQN checkpoints/plots are saved under `results/dqn/`.
+
+Launch TensorBoard:
 
 ```bash
 tensorboard --logdir results/tensorboard
 ```
 
-Then open http://localhost:6006. All runs show up side-by-side.
+Then open [http://localhost:6006](http://localhost:6006).
 
-## Sanity check
+## Testing
+
+Run everything:
 
 ```bash
-python tests/test_env.py
+python -m pytest
 ```
 
-Runs 5 random episodes in each mode, checks shapes, and exercises the logger. Use the loop in `tests/test_env.py::run_random_episodes` as a template.
+Run only environment sanity test:
 
-## Fairness rules
+```bash
+python -m pytest tests/test_env.py
+```
 
-- All algos run on every seed in `DEFAULT_SEEDS`.
-- All algos run for `DEFAULT_MAX_EPISODES` episodes.
-- All algos use `make_env("LunarLander-v3", seed=<seed>, continuous=False)`.
-- All agents log through `RunLogger(algo, seed)`.
+## Notes
 
-If you need to change any of these, raise it in the group chat **before** long runs.
+- Seeding and env creation are centralized in `moonlander_rl.env.utils`.
+- Evaluation supports extra options like `--checkpoint`, `--max-steps`, `--device`,
+  `--demo-trials`, and `--vis-seed`.
